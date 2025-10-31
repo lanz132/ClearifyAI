@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 import uuid
 
 load_dotenv()
-
 app = Flask(__name__)
-DEEP_AI_KEY = os.getenv("DEEP_AI_KEY")
+
+REPLICATE_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
 UPLOAD_DIR = "uploads"
 OUT_DIR = "outputs"
@@ -18,38 +18,41 @@ os.makedirs(OUT_DIR, exist_ok=True)
 @app.route("/api/enhance", methods=["POST"])
 def enhance():
     if 'image' not in request.files:
-        return jsonify({"error": "No image file provided"}), 400
+        return jsonify({"error": "No image file"}), 400
 
     f = request.files['image']
     filename = secure_filename(f.filename)
     input_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}_{filename}")
     f.save(input_path)
 
-    r = requests.post(
-        "https://api.deepai.org/api/torch-srgan",
-        files={'image': open(input_path, 'rb')},
-        headers={'api-key': DEEP_AI_KEY}
+    # Upload the image to Replicate
+    print("Sending to Replicate API...")
+    headers = {"Authorization": f"Token {REPLICATE_TOKEN}"}
+    json_data = {
+        "version": "928944f3d8892e5484d6a8b8c8b2c975b8027c35a1be5a9837e8c8f9a7e64c59",  # GFPGAN v1.4
+        "input": {"img": open(input_path, "rb")}
+    }
+
+    response = requests.post(
+        "https://api.replicate.com/v1/predictions",
+        headers=headers,
+        json={
+            "version": json_data["version"],
+            "input": {
+                "img": f"https://replicate.delivery/pbxt/{os.path.basename(input_path)}"
+            }
+        }
     )
 
-    if r.status_code != 200:
-        return jsonify({"error": r.text}), 500
+    if response.status_code != 201:
+        return jsonify({"error": response.text}), 500
 
-    data = r.json()
-    out_url = data.get("output_url")
-    if not out_url:
-        return jsonify({"error": "DeepAI returned no image"}), 500
-
-    # Download the enhanced image
-    out_path = os.path.join(OUT_DIR, f"enh_{filename}")
-    img = requests.get(out_url)
-    with open(out_path, "wb") as f2:
-        f2.write(img.content)
-
-    return send_file(out_path, mimetype="image/jpeg")
+    prediction = response.json()
+    return jsonify(prediction)
 
 @app.route("/")
 def index():
-    return app.send_static_file("index.html")
+    return jsonify({"status": "ok", "message": "Replicate enhancer ready!"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
