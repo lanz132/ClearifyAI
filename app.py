@@ -21,13 +21,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
 
 
-# 🏠 Serve the frontend
+# 🏠 Serve index.html from static folder
 @app.route("/")
 def home():
     return send_from_directory("static", "index.html")
 
 
-# ⚙️ AI Enhancement Route (GFPGAN + Real-ESRGAN)
+# ⚙️ Main Enhance Endpoint
 @app.route("/api/enhance", methods=["POST"])
 def enhance():
     if "image" not in request.files:
@@ -39,27 +39,28 @@ def enhance():
     f.save(input_path)
 
     try:
-        # 🔹 STEP 1: Face Restoration (GFPGAN)
-        print("🧠 Step 1: Restoring face using GFPGAN...")
-        gfpgan = replicate.models.get("tencentarc/gfpgan")
-        gfpgan_output = gfpgan.predict(img=open(input_path, "rb"))
+        print("🧠 Step 1: Face restoration using GFPGAN...")
+        gfpgan_output = replicate.run(
+            "tencentarc/gfpgan:latest",
+            input={"img": open(input_path, "rb")}
+        )
 
         if not gfpgan_output or len(gfpgan_output) == 0:
             return jsonify({"error": "GFPGAN failed to produce output"}), 500
 
         face_fixed_url = gfpgan_output[0]
 
-        # 🔹 STEP 2: HD Upscale (Real-ESRGAN)
-        print("🔍 Step 2: Upscaling image using Real-ESRGAN...")
-        realesrgan = replicate.models.get("xinntao/realesrgan")
-        realesrgan_output = realesrgan.predict(img=face_fixed_url)
+        print("🔍 Step 2: HD upscaling using Real-ESRGAN...")
+        realesrgan_output = replicate.run(
+            "xinntao/realesrgan:latest",
+            input={"img": face_fixed_url}
+        )
 
         if not realesrgan_output or len(realesrgan_output) == 0:
             return jsonify({"error": "Real-ESRGAN failed to produce output"}), 500
 
         enhanced_url = realesrgan_output[0]
 
-        # 🔹 STEP 3: Download final image
         print("📥 Downloading enhanced image...")
         output_path = os.path.join(OUT_DIR, f"enh_{filename}")
         img_data = requests.get(enhanced_url).content
@@ -80,6 +81,5 @@ def health():
     return jsonify({"status": "ok", "message": "Replicate enhancer combo ready!"})
 
 
-# 🚀 Run app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
