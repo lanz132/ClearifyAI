@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>DeepAI Image Enhancer</title>
+    <style>
+      body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+      img { max-width: 90%; margin-top: 20px; border-radius: 12px; box-shadow: 0 0 10px #ccc; }
+      button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+      button:disabled { background: gray; }
+    </style>
+  </head>
+  <body>
+    <h2>DeepAI Image Enhancer</h2>
+    <form id="form" enctype="multipart/form-data">
+      <input type="file" name="image" required />
+      <br><br>
+      <button type="submit">Enhance</button>
+    </form>
+    <div id="result"></div>
+    <script>
+      const form = document.getElementById("form");
+      const result = document.getElementById("result");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        result.innerHTML = "<p>Enhancing... please wait.</p>";
+        const res = await fetch("/api/enhance", { method: "POST", body: formData });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          result.innerHTML = `<img src='${url}' alt='Enhanced Image'>`;
+        } else {
+          const err = await res.text();
+          result.innerHTML = `<p style='color:red;'>Error: ${err}</p>`;
+        }
+      });
+    </script>
+  </body>
+</html>
